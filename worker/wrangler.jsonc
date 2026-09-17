@@ -1,0 +1,24 @@
+{
+  // Cloudflare Worker config. See https://developers.cloudflare.com/workers/wrangler/configuration/
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mcp-sonos",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Everything personal (bridge URL, tokens, allowed email, Access app) is a
+  // secret — see README. Nothing in this file is sensitive.
+
+  // Token store required by @cloudflare/workers-oauth-provider.
+  // Create with: npx wrangler kv namespace create OAUTH_KV  → paste the id below.
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+      "id": "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+    }
+  ],
+
+  "observability": {
+    "enabled": true
+  }
+}

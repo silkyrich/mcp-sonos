@@ -1,0 +1,31 @@
+# ── SECRETS: never commit ──────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+*.local
+*.pem
+*.key
+*.rtf
+secrets/
+credentials*
+
+# ── Bridge runtime ─────────────────────────────────────────────────────
+bridge/cache/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ── Cloudflare / Node ──────────────────────────────────────────────────
+.wrangler/
+node_modules/
+npm-debug.log*
+dist/
+
+# ── OS / editor ────────────────────────────────────────────────────────
+.DS_Store
+.vscode/
+.idea/

@@ -1,0 +1,23 @@
+services:
+  bridge:
+    build: .
+    container_name: sonos-bridge
+    # Host networking is required: SSDP discovery is multicast, and the
+    # speakers fetch announcement clips from http://HOST_IP:PORT/audio/...
+    network_mode: host
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./cache:/data/cache
+
+  # Optional: publish the bridge through a Cloudflare Tunnel for the Worker.
+  # See README "Expose the bridge". Start with: docker compose --profile tunnel up -d
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: sonos-bridge-tunnel
+    network_mode: host
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    profiles: ["tunnel"]

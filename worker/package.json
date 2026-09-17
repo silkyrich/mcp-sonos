@@ -1,0 +1,22 @@
+{
+  "name": "mcp-sonos",
+  "version": "0.1.0",
+  "description": "Remote MCP connector for a local Sonos bridge: announcements, sound clips, EQ, alarms and other things the official Sonos connector can't do.",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "^0.10.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260831.1",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.128.0"
+  }
+}

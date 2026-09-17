@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Quick CLI against the bridge on your LAN.
+#   ./announce "Dinner's ready"                 # every room
+#   ./announce "Dinner's ready" Kitchen Office
+# Reads BRIDGE_URL (default http://$HOST_IP:$PORT) and the token from .env unless set.
+set -euo pipefail
+here="$(dirname "$0")"
+envval() { grep -E "^$1=" "$here/.env" 2>/dev/null | head -1 | cut -d= -f2- | sed 's/[[:space:]]*#.*//; s/[[:space:]]*$//'; }
+port="$(envval PORT || true)"
+URL="${BRIDGE_URL:-http://$(envval HOST_IP):${port:-8765}}"
+TOK="${BRIDGE_TOKEN:-$(envval API_TOKEN)}"
+[ $# -ge 1 ] || { echo "usage: $0 \"text\" [room ...]"; exit 1; }
+text="$1"; shift
+body=$(python3 -c 'import json,sys; t,*r=sys.argv[1:]; print(json.dumps({"text":t,"rooms":r or "all"}))' "$text" "$@")
+curl -sS -X POST "$URL/announce" -H "Authorization: Bearer $TOK" -H 'content-type: application/json' -d "$body"
+echo

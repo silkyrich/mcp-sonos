@@ -1,0 +1,9 @@
+# Copy to .dev.vars for `npm run dev` (gitignored). Production uses `wrangler secret put`.
+BRIDGE_URL=https://sonos-bridge.example.com
+BRIDGE_TOKEN=
+BRIDGE_ACCESS_CLIENT_ID=
+BRIDGE_ACCESS_CLIENT_SECRET=
+ALLOWED_EMAIL=you@example.com
+ACCESS_TEAM_DOMAIN=your-team.cloudflareaccess.com
+ACCESS_CLIENT_ID=
+ACCESS_CLIENT_SECRET=
