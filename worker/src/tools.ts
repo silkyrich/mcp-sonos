@@ -12,7 +12,14 @@
  * (RINCON_...) the official connector returns.
  */
 
-import { Bridge, room } from "./bridge";
+import { Bridge, BridgeError, room } from "./bridge";
+
+/** Text-to-speech runs here, on Workers AI, so the bridge needs no TTS key. */
+export interface Speech {
+  ai: Ai;
+  model: string; // e.g. @cf/deepgram/aura-2-en
+  voice: string; // e.g. draco
+}
 
 export interface Tool {
   name: string;
@@ -20,7 +27,41 @@ export interface Tool {
   inputSchema: Record<string, unknown>;
   /** MCP tool annotations, so clients can tell writes apart and ask first. */
   annotations?: Record<string, boolean>;
-  handler: (bridge: Bridge, args: Record<string, any>) => Promise<unknown>;
+  handler: (bridge: Bridge, args: Record<string, any>, speech: Speech) => Promise<unknown>;
+}
+
+async function sha256hex(s: string): Promise<string> {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function toBytes(out: unknown): Promise<ArrayBuffer> {
+  if (out instanceof ArrayBuffer) return out;
+  if (ArrayBuffer.isView(out)) return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength) as ArrayBuffer;
+  if (out instanceof ReadableStream || out instanceof Response) return new Response(out as BodyInit).arrayBuffer();
+  const audio = (out as { audio?: string })?.audio; // base64 (e.g. MeloTTS)
+  if (typeof audio === "string") return Uint8Array.from(atob(audio), (c) => c.charCodeAt(0)).buffer;
+  throw new Error("unexpected text-to-speech output");
+}
+
+/**
+ * Speak `text`: the clip key is a hash of model, voice and text, so a phrase
+ * is generated once and then replayed from the bridge's cache.
+ */
+async function announce(b: Bridge, a: Record<string, any>, speech: Speech): Promise<unknown> {
+  const text = String(a.text ?? "").trim();
+  if (!text) throw new Error("text is required");
+  const voice = a.voice || speech.voice;
+  const key = (await sha256hex(`workers-ai|${speech.model}|${voice}|${text}`)).slice(0, 32);
+  const play = { clip: key, rooms: a.rooms ?? "all", volume: a.volume ?? null };
+  try {
+    return await b.post("/announce", play);
+  } catch (e) {
+    if (!(e instanceof BridgeError && e.status === 404 && e.message === "clip not cached")) throw e;
+  }
+  const out = await speech.ai.run(speech.model as keyof AiModels, { text, speaker: voice, encoding: "mp3" } as never);
+  await b.putBytes(`/clips/${key}`, await toBytes(out), "audio/mpeg");
+  return b.post("/announce", play);
 }
 
 const READ = { readOnlyHint: true };
@@ -61,13 +102,17 @@ export const TOOLS: Tool[] = [
       properties: {
         text: { type: "string", maxLength: 600, description: "What to say" },
         rooms: ROOMS,
+        voice: {
+          type: "string",
+          description: "Optional voice, e.g. draco (British male), pandora (British female), luna, asteria, orion",
+        },
         volume: { type: "integer", minimum: 0, maximum: 100, description: "Announcement volume (bridge default if omitted)" },
       },
       required: ["text"],
       additionalProperties: false,
     },
     annotations: WRITE,
-    handler: (b, a) => b.post("/announce", { text: a.text, rooms: a.rooms ?? "all", volume: a.volume ?? null }),
+    handler: announce,
   },
   {
     name: "play_sound",

@@ -22,6 +22,7 @@ import type { BridgeConfig } from "./bridge";
 
 interface Env {
   OAUTH_KV: KVNamespace;
+  AI: Ai;
   OAUTH_PROVIDER: OAuthHelpers; // injected by the provider
 
   // Secrets (wrangler secret put ...)
@@ -33,6 +34,10 @@ interface Env {
   ACCESS_TEAM_DOMAIN: string; // e.g. your-team.cloudflareaccess.com
   ACCESS_CLIENT_ID: string;
   ACCESS_CLIENT_SECRET: string;
+
+  // Vars (wrangler.jsonc)
+  TTS_MODEL: string;
+  TTS_VOICE: string;
 }
 
 // Props carried on the token and exposed to the API handler via ctx.props.
@@ -213,7 +218,7 @@ const apiHandler: Handler = {
       accessClientId: env.BRIDGE_ACCESS_CLIENT_ID,
       accessClientSecret: env.BRIDGE_ACCESS_CLIENT_SECRET,
     };
-    return handleMcp(request, cfg);
+    return handleMcp(request, cfg, { ai: env.AI, model: env.TTS_MODEL, voice: env.TTS_VOICE });
   },
 };
 

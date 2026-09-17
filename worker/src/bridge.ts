@@ -27,9 +27,14 @@ export class BridgeError extends Error {
 export class Bridge {
   constructor(private cfg: BridgeConfig) {}
 
-  async call(method: "GET" | "POST" | "DELETE", path: string, body?: unknown): Promise<unknown> {
+  async call(
+    method: "GET" | "POST" | "PUT" | "DELETE",
+    path: string,
+    body?: unknown,
+    contentType = "application/json",
+  ): Promise<unknown> {
     const headers: Record<string, string> = { authorization: `Bearer ${this.cfg.token}` };
-    if (body !== undefined) headers["content-type"] = "application/json";
+    if (body !== undefined) headers["content-type"] = contentType;
     if (this.cfg.accessClientId && this.cfg.accessClientSecret) {
       headers["CF-Access-Client-Id"] = this.cfg.accessClientId;
       headers["CF-Access-Client-Secret"] = this.cfg.accessClientSecret;
@@ -37,7 +42,7 @@ export class Bridge {
     const res = await fetch(`${this.cfg.url.replace(/\/$/, "")}${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : contentType === "application/json" ? JSON.stringify(body) : (body as BodyInit),
       redirect: "manual", // an Access login redirect means the service token was refused
     });
     const text = await res.text();
@@ -60,6 +65,7 @@ export class Bridge {
   get = (path: string) => this.call("GET", path);
   post = (path: string, body: unknown = {}) => this.call("POST", path, body);
   del = (path: string) => this.call("DELETE", path);
+  putBytes = (path: string, bytes: ArrayBuffer, contentType: string) => this.call("PUT", path, bytes, contentType);
 }
 
 export const room = (r: unknown) => `/rooms/${encodeURIComponent(String(r))}`;

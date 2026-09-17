@@ -9,6 +9,14 @@
   // Everything personal (bridge URL, tokens, allowed email, Access app) is a
   // secret — see README. Nothing in this file is sensitive.
 
+  // Text-to-speech for `announce` runs on Workers AI. Aura-2 voices include
+  // draco (British male), pandora (British female), luna, asteria, orion.
+  "ai": { "binding": "AI" },
+  "vars": {
+    "TTS_MODEL": "@cf/deepgram/aura-2-en",
+    "TTS_VOICE": "draco"
+  },
+
   // Token store required by @cloudflare/workers-oauth-provider.
   // Create with: npx wrangler kv namespace create OAUTH_KV  → paste the id below.
   "kv_namespaces": [

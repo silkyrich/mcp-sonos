@@ -9,7 +9,7 @@
  */
 
 import { Bridge, BridgeConfig, BridgeError } from "./bridge";
-import { TOOLS, TOOLS_BY_NAME } from "./tools";
+import { TOOLS, TOOLS_BY_NAME, type Speech } from "./tools";
 import { log, logError } from "./log";
 
 const PROTOCOL_VERSION = "2025-06-18";
@@ -29,7 +29,7 @@ function error(id: any, code: number, message: string) {
   return { jsonrpc: "2.0", id, error: { code, message } };
 }
 
-async function dispatch(req: JsonRpcRequest, cfg: BridgeConfig): Promise<object | null> {
+async function dispatch(req: JsonRpcRequest, cfg: BridgeConfig, speech: Speech): Promise<object | null> {
   switch (req.method) {
     case "initialize":
       return result(req.id, {
@@ -66,7 +66,7 @@ async function dispatch(req: JsonRpcRequest, cfg: BridgeConfig): Promise<object 
       const bridge = new Bridge(cfg);
       const started = Date.now();
       try {
-        const data = await tool.handler(bridge, req.params?.arguments ?? {});
+        const data = await tool.handler(bridge, req.params?.arguments ?? {}, speech);
         log("mcp.tool.ok", { tool: name, ms: Date.now() - started });
         return result(req.id, {
           content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
@@ -98,7 +98,7 @@ async function dispatch(req: JsonRpcRequest, cfg: BridgeConfig): Promise<object 
  * Handle one Streamable-HTTP POST. Accepts a single JSON-RPC request or a
  * batch array; returns application/json. Notifications yield 202 with no body.
  */
-export async function handleMcp(request: Request, cfg: BridgeConfig): Promise<Response> {
+export async function handleMcp(request: Request, cfg: BridgeConfig, speech: Speech): Promise<Response> {
   if (request.method === "GET") {
     // No server-initiated SSE stream in this stateless design.
     return new Response("Method Not Allowed", { status: 405 });
@@ -116,7 +116,7 @@ export async function handleMcp(request: Request, cfg: BridgeConfig): Promise<Re
 
   const batch = Array.isArray(payload);
   const reqs: JsonRpcRequest[] = batch ? (payload as JsonRpcRequest[]) : [payload as JsonRpcRequest];
-  const responses = (await Promise.all(reqs.map((r) => dispatch(r, cfg)))).filter(
+  const responses = (await Promise.all(reqs.map((r) => dispatch(r, cfg, speech)))).filter(
     (r): r is object => r !== null,
   );
 

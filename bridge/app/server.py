@@ -2,6 +2,8 @@
 
   Announcements and clips (whatever was playing resumes afterwards)
     POST /announce                {"text": "...", "rooms": ["Kitchen"] | "all", "volume": 40}
+                                  or {"clip": "<key>", ...} to play speech uploaded with PUT /clips
+    PUT  /clips/{key}             body: audio/mpeg. Speech made elsewhere (the Worker uses Workers AI)
     POST /play                    {"url": "https://...mp3", "rooms": ..., "volume": ..., "seconds": ...}
 
   Local-only controls (not in Sonos's cloud API)
@@ -27,7 +29,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import secrets
+import tempfile
 import time
 from contextlib import asynccontextmanager
 from typing import Any, Callable
@@ -85,7 +89,8 @@ Rooms = list[str] | str
 
 
 class AnnounceIn(BaseModel):
-    text: str = Field(min_length=1, max_length=600)
+    text: str | None = Field(default=None, min_length=1, max_length=600)
+    clip: str | None = None  # key of a clip uploaded with PUT /clips/{key}
     rooms: Rooms = "all"
     volume: int | None = Field(default=None, ge=0, le=100)
 
@@ -146,9 +151,14 @@ def _clip_url(path: str) -> str:
     return f"http://{settings.host_ip}:{settings.port}/audio/{os.path.basename(path)}"
 
 
+CLIP_KEY = re.compile(r"^[a-f0-9]{16,64}$")
+MAX_CLIP_BYTES = 8 * 1024 * 1024
+
+
 def _est_seconds(path: str) -> float:
-    # mp3_44100_128 -> 128 kbit/s. Only used to bound how long we wait.
-    return os.path.getsize(path) * 8 / 128_000
+    # Assume a low bitrate (32 kbit/s) so the estimate errs long. Only used to
+    # bound how long the UPnP path waits if it misses the end of the clip.
+    return os.path.getsize(path) * 8 / 32_000
 
 
 @app.get("/health")
@@ -165,13 +175,37 @@ async def rooms(refresh: bool = False) -> list[dict]:
 
 # ------------------------------------------------------------------- announce / clips
 
+@app.put("/clips/{key}", dependencies=[Depends(auth)])
+async def put_clip(key: str, req: Request) -> dict:
+    """Store speech generated elsewhere, keyed by the caller's hash of it."""
+    if not CLIP_KEY.match(key):
+        raise HTTPException(400, "clip key must be 16-64 lowercase hex characters")
+    data = await req.body()
+    if not data or len(data) > MAX_CLIP_BYTES:
+        raise HTTPException(400, f"clip must be 1..{MAX_CLIP_BYTES} bytes")
+    os.makedirs(settings.cache_dir, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=settings.cache_dir, suffix=".part")
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+    os.replace(tmp, os.path.join(settings.cache_dir, f"{key}.mp3"))
+    return {"key": key, "bytes": len(data)}
+
+
 @app.post("/announce", dependencies=[Depends(auth)])
 async def announce(body: AnnounceIn) -> JSONResponse:
     t0 = time.monotonic()
-    try:
-        path, cached = await tts.synthesize(settings, body.text)
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(502, f"tts failed: {e}") from e
+    if (body.text is None) == (body.clip is None):
+        raise HTTPException(400, "pass exactly one of text or clip")
+    if body.clip is not None:
+        path = os.path.join(settings.cache_dir, f"{body.clip}.mp3")
+        if not CLIP_KEY.match(body.clip) or not os.path.isfile(path):
+            raise HTTPException(404, "clip not cached")
+        cached = True
+    else:
+        try:
+            path, cached = await tts.synthesize(settings, body.text)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(502, f"tts failed: {e}") from e
     t_tts = time.monotonic() - t0
     async with _sema:
         rep = await run(bridge.announce, body.rooms, _clip_url(path), body.volume, cached,
@@ -179,7 +213,7 @@ async def announce(body: AnnounceIn) -> JSONResponse:
     rep.timings["tts"] = t_tts
     rep.timings["end_to_end"] = time.monotonic() - t0
     log.info("announce %r rooms=%s strategy=%s t=%.2fs warn=%d",
-             body.text[:40], rep.rooms, rep.strategy, rep.timings["end_to_end"], len(rep.warnings))
+             (body.text or f"clip:{body.clip}")[:40], rep.rooms, rep.strategy, rep.timings["end_to_end"], len(rep.warnings))
     return JSONResponse(rep.__dict__)
 
 
