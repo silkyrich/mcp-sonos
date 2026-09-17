@@ -26,6 +26,11 @@ class Settings:
     max_clip_seconds: int     # safety cap on how long we wait for a clip
     discovery_timeout: int
 
+    # Sound effects
+    sounds_dir: str           # local library: drop mp3/wav/ogg files here
+    freesound_api_key: str    # optional; enables Freesound in search
+    max_sound_bytes: int
+
 
 def load() -> Settings:
     return Settings(
@@ -40,4 +45,7 @@ def load() -> Settings:
         default_volume=int(_env("DEFAULT_VOLUME", "35")),
         max_clip_seconds=int(_env("MAX_CLIP_SECONDS", "60")),
         discovery_timeout=int(_env("DISCOVERY_TIMEOUT", "5")),
+        sounds_dir=_env("SOUNDS_DIR", "/data/sounds"),
+        freesound_api_key=_env("FREESOUND_API_KEY", ""),
+        max_sound_bytes=int(_env("MAX_SOUND_BYTES", str(30 * 1024 * 1024))),
     )

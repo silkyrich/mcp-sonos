@@ -175,7 +175,8 @@ def bridge(monkeypatch):
     from app import sonos as sonos_mod
     s = Settings(eleven_api_key="x", eleven_voice_id="v", eleven_model="m", eleven_output_format="f",
                  api_token="t", host_ip="10.0.0.99", port=8765, cache_dir="/tmp/c",
-                 default_volume=40, max_clip_seconds=5, discovery_timeout=1)
+                 default_volume=40, max_clip_seconds=5, discovery_timeout=1,
+                 sounds_dir="/tmp/s", freesound_api_key="", max_sound_bytes=1000)
     b = sonos_mod.Bridge(s)
     # no real players -> no fast path
     monkeypatch.setattr(b, "probe_audioclip", lambda p: False)

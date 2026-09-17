@@ -115,24 +115,47 @@ export const TOOLS: Tool[] = [
     handler: announce,
   },
   {
-    name: "play_sound",
+    name: "search_sounds",
     description:
-      "Play a short audio clip (mp3 URL: a doorbell, a chime, a sound effect) over whatever is playing, which then carries on. " +
-      "For a stream that should keep playing, use play_stream_url. " + NORMAL_PLAYBACK,
+      "Find a sound effect to play with play_sound. Searches the bridge's local library, BBC Sound Effects (33,000 clips, " +
+      "no key needed) and Freesound (if configured), returning descriptions, lengths and direct file URLs. " +
+      "ALWAYS use this before searching the web for a sound: results here are real audio files the bridge can play. " +
+      "For songs or music-like sounds (rain for sleep, a jingle), use the official Sonos connector and a music service instead.",
     inputSchema: {
       type: "object",
       properties: {
-        url: { type: "string", description: "http(s) URL of an mp3 the speakers can reach" },
+        query: { type: "string", description: 'e.g. "thunder clap", "doorbell", "cat meow"' },
+        limit: { type: "integer", minimum: 1, maximum: 25, description: "Results per source (default 8)" },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    annotations: READ,
+    handler: (b, a) => b.get(`/sounds?q=${encodeURIComponent(String(a.query))}&limit=${a.limit ?? 8}`),
+  },
+  {
+    name: "play_sound",
+    description:
+      "Play a sound effect over whatever is playing (the music ducks, then carries on). Give either `sound`, a name from the " +
+      "bridge's library (see search_sounds; 'chime' is built in), or `url`, a direct link to an audio file. Any format works " +
+      "(mp3, wav, ogg, flac, m4a): the bridge downloads and converts it, so pass the file's own URL, not a web page or player " +
+      "page. To find one: 1) search_sounds, 2) the official Sonos connector for anything on a music service, 3) only then a web " +
+      "search. For a stream that should keep playing, use play_stream_url.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sound: { type: "string", description: "Library name, e.g. chime" },
+        url: { type: "string", description: "Direct http(s) URL of an audio file, e.g. from search_sounds" },
         rooms: ROOMS,
         volume: { type: "integer", minimum: 0, maximum: 100 },
-        seconds: { type: "number", description: "Approximate clip length; bounds how long to wait on older speakers" },
       },
-      required: ["url"],
       additionalProperties: false,
     },
     annotations: WRITE,
-    handler: (b, a) =>
-      b.post("/play", { url: a.url, rooms: a.rooms ?? "all", volume: a.volume ?? null, seconds: a.seconds ?? null }),
+    handler: (b, a) => {
+      if (!a.sound && !a.url) throw new Error("pass sound (a library name) or url");
+      return b.post("/play", { sound: a.sound ?? null, url: a.url ?? null, rooms: a.rooms ?? "all", volume: a.volume ?? null });
+    },
   },
   {
     name: "play_stream_url",

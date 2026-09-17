@@ -56,3 +56,12 @@ def test_clip_key_and_body_validation(client):
 def test_announce_needs_exactly_one_of_text_or_clip(client):
     assert client.post("/announce", json={"rooms": "all"}, headers=H).status_code == 400
     assert client.post("/announce", json={"text": "hi", "clip": KEY}, headers=H).status_code == 400
+
+
+def test_audio_supports_head_and_range(client, tmp_path):
+    client.put(f"/clips/{KEY}", content=b"ID3" + b"x" * 200, headers=H)
+    r = client.head(f"/audio/{KEY}.mp3")
+    assert r.status_code == 200 and r.headers["content-length"] == "203" and r.content == b""
+    r = client.get(f"/audio/{KEY}.mp3", headers={"Range": "bytes=0-9"})
+    assert r.status_code == 206 and len(r.content) == 10
+    assert client.get("/audio/nope.mp3").status_code == 404

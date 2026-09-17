@@ -9,6 +9,7 @@ services:
     env_file: .env
     volumes:
       - ./cache:/data/cache
+      - ./sounds:/data/sounds   # drop your own mp3/wav/ogg files here; play them by name
 
   # Optional: publish the bridge through a Cloudflare Tunnel for the Worker.
   # See README "Expose the bridge". Start with: docker compose --profile tunnel up -d

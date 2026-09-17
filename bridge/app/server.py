@@ -4,7 +4,9 @@
     POST /announce                {"text": "...", "rooms": ["Kitchen"] | "all", "volume": 40}
                                   or {"clip": "<key>", ...} to play speech uploaded with PUT /clips
     PUT  /clips/{key}             body: audio/mpeg. Speech made elsewhere (the Worker uses Workers AI)
-    POST /play                    {"url": "https://...mp3", "rooms": ..., "volume": ..., "seconds": ...}
+    POST /play                    {"url": "https://...", "rooms": ..., "volume": ...}  any audio format;
+                                  fetched + converted to mp3 on the bridge. Or {"sound": "<library name>"}
+    GET  /sounds?q=thunder        search the local library, BBC Sound Effects and (if keyed) Freesound
 
   Local-only controls (not in Sonos's cloud API)
     GET  /rooms                   discovered rooms + which support the audioClip fast path
@@ -40,7 +42,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from . import controls, tts
+from . import controls, sounds, tts
 from .config import Settings, load
 from .sonos import Bridge
 
@@ -96,10 +98,10 @@ class AnnounceIn(BaseModel):
 
 
 class PlayIn(BaseModel):
-    url: str = Field(min_length=8)
+    url: str | None = Field(default=None, min_length=8)
+    sound: str | None = None  # a name from the local library
     rooms: Rooms = "all"
     volume: int | None = Field(default=None, ge=0, le=100)
-    seconds: float | None = Field(default=None, gt=0, le=600)
 
 
 class Balance(BaseModel):
@@ -217,15 +219,32 @@ async def announce(body: AnnounceIn) -> JSONResponse:
     return JSONResponse(rep.__dict__)
 
 
+@app.get("/sounds", dependencies=[Depends(auth)])
+async def search_sounds(q: str = "", limit: int = 8) -> dict:
+    return await run(sounds.search, settings, q, max(1, min(limit, 25)))
+
+
 @app.post("/play", dependencies=[Depends(auth)])
 async def play(body: PlayIn) -> JSONResponse:
-    """Play an arbitrary clip URL (a doorbell, a chime) with the same restore semantics."""
+    """Play a sound effect (from a URL in any format, or the local library)
+    with the same duck-and-resume semantics as an announcement."""
+    t0 = time.monotonic()
+    try:
+        path, secs, cached = await run(sounds.prepare, settings, url=body.url, sound=body.sound)
+    except RuntimeError as e:
+        raise HTTPException(502, str(e)) from e
+    t_prep = time.monotonic() - t0
     async with _sema:
-        rep = await run(bridge.announce, body.rooms, body.url, body.volume, False, body.seconds)
-    return JSONResponse(rep.__dict__)
+        rep = await run(bridge.announce, body.rooms, _clip_url(path), body.volume, cached,
+                        secs or _est_seconds(path))
+    rep.timings["prepare"] = t_prep
+    rep.timings["end_to_end"] = time.monotonic() - t0
+    out = {**rep.__dict__, "seconds": secs}
+    log.info("play %s rooms=%s %.1fs cached=%s", body.sound or body.url, rep.rooms, secs or -1, cached)
+    return JSONResponse(out)
 
 
-@app.get("/audio/{name}")
+@app.api_route("/audio/{name}", methods=["GET", "HEAD"])  # players may HEAD a clip to size it
 async def audio(name: str):
     if "/" in name or ".." in name or not name.endswith(".mp3"):
         raise HTTPException(404)
