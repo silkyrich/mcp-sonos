@@ -141,9 +141,10 @@ npx wrangler secret put ACCESS_CLIENT_SECRET
 npm run deploy
 ```
 
-The KV namespace id isn't a secret. It's only usable with your Cloudflare
-account credentials. If you'd rather not commit it in a fork, keep that edit
-local.
+The KV namespace id isn't a secret, but to keep your fork clean you can copy
+`wrangler.jsonc` to `wrangler.local.jsonc` (gitignored), put the real id there,
+and deploy with `npm run deploy:local`. Pass `-c wrangler.local.jsonc` to the
+`secret put` commands too.
 
 ### 4. Add to Claude
 

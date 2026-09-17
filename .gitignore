@@ -29,3 +29,6 @@ dist/
 .DS_Store
 .vscode/
 .idea/
+
+# Personal deploy config (real KV id): npm run deploy:local
+worker/wrangler.local.jsonc
